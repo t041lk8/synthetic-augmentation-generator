@@ -58,7 +58,6 @@ generator({call_args})
 |dir_dataset|str, os.PathLike|None|Путь к аугментированным изображениям|
 |weights|str, os.PathLike|stabilityai/stable-diffusion-2-inpainting|Путь к предобученной модели|
 
-guidance_scale=args.guidance_scale, num_inference_steps=args.num_inference_steps, bb_num=args.bbox_number, negative_prompt=args.negative_prompt, increase_scale=args.increase_scale
 ### Вызов
 |Аргумент|Тип|Значение по умолчанию|Описание|
 |-|-|-|-|
