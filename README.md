@@ -1,11 +1,11 @@
 # SyntheticAugmentationGenerator
 **_Библиотека для аугментации изображений путём генерации заданных объектов при помощи диффузионных моделей_**
 
-![](content/result.jpg)
+![](content/synt_generator.png)
 
 Для установки библиотеки запустите данный код:
 ```console
-git clone https://git.ai-space.tech/t041lk8/syntheticaugmentationgenerator
+git clone https://git.ai-space.tech/t041lk8/synthetic-augmentation-generator
 cd syntheticaugmentationgenerator
 pip install .
 cd ..
