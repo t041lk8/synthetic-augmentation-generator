@@ -1,0 +1,209 @@
+{
+  "images": [
+    {
+      "width": 1920,
+      "height": 1080,
+      "id": 0,
+      "file_name": "images\/0a25d6d7-23750.png"
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "id": 1,
+      "file_name": "images\/992c5b1c-22850.png"
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "id": 2,
+      "file_name": "images\/34540459-21400.png"
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "id": 3,
+      "file_name": "images\/ac6b747c-20750.png"
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "id": 4,
+      "file_name": "images\/aa0197be-19137.png"
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "id": 5,
+      "file_name": "images\/a2a155f5-18142.png"
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "id": 6,
+      "file_name": "images\/7fec2762-15893.png"
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "id": 7,
+      "file_name": "images\/e7a774ee-6500.png"
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "id": 8,
+      "file_name": "images\/eaa42220-5007.png"
+    }
+  ],
+  "categories": [
+    {
+      "id": 0,
+      "name": "pedestrian"
+    }
+  ],
+  "annotations": [
+    {
+      "id": 0,
+      "image_id": 0,
+      "category_id": 0,
+      "segmentation": [],
+      "bbox": [
+        443.6957510606642,
+        639.3917563575263,
+        30.64094951379911,
+        36.48692014472339
+      ],
+      "ignore": 0,
+      "iscrowd": 0,
+      "area": 1117.9938780684893
+    },
+    {
+      "id": 1,
+      "image_id": 1,
+      "category_id": 0,
+      "segmentation": [],
+      "bbox": [
+        250.5153458795416,
+        718.7375193662525,
+        35.68057936804191,
+        25.601319659556598
+      ],
+      "ignore": 0,
+      "iscrowd": 0,
+      "area": 913.4699180394209
+    },
+    {
+      "id": 2,
+      "image_id": 2,
+      "category_id": 0,
+      "segmentation": [],
+      "bbox": [
+        1410.9070749549521,
+        818.5700718967466,
+        30.787556927742024,
+        48.38044660073593
+      ],
+      "ignore": 0,
+      "iscrowd": 0,
+      "area": 1489.5157539097406
+    },
+    {
+      "id": 3,
+      "image_id": 3,
+      "category_id": 0,
+      "segmentation": [],
+      "bbox": [
+        1045.6604035621554,
+        773.5393117499366,
+        25.82289677381184,
+        50.31299887541995
+      ],
+      "ignore": 0,
+      "iscrowd": 0,
+      "area": 1299.2273763408807
+    },
+    {
+      "id": 4,
+      "image_id": 4,
+      "category_id": 0,
+      "segmentation": [],
+      "bbox": [
+        999.9036376081043,
+        386.4037513597473,
+        42.332890775643,
+        27.488890114053937
+      ],
+      "ignore": 0,
+      "iscrowd": 0,
+      "area": 1163.684182741898
+    },
+    {
+      "id": 5,
+      "image_id": 5,
+      "category_id": 0,
+      "segmentation": [],
+      "bbox": [
+        1008.4369501032222,
+        275.17308837956773,
+        36.49014550782933,
+        40.514793909426125
+      ],
+      "ignore": 0,
+      "iscrowd": 0,
+      "area": 1478.390724974677
+    },
+    {
+      "id": 6,
+      "image_id": 6,
+      "category_id": 0,
+      "segmentation": [],
+      "bbox": [
+        678.3418605727016,
+        115.94837754216316,
+        53.125358901101244,
+        30.104370043957697
+      ],
+      "ignore": 0,
+      "iscrowd": 0,
+      "area": 1599.3054630768138
+    },
+    {
+      "id": 7,
+      "image_id": 7,
+      "category_id": 0,
+      "segmentation": [],
+      "bbox": [
+        1576.9747286987583,
+        605.1460969228231,
+        49.296742937870384,
+        56.81037290237807
+      ],
+      "ignore": 0,
+      "iscrowd": 0,
+      "area": 2800.5663491730893
+    },
+    {
+      "id": 8,
+      "image_id": 8,
+      "category_id": 0,
+      "segmentation": [],
+      "bbox": [
+        1853.6465290429103,
+        94.64530220032765,
+        35.36812231709077,
+        47.56402656434788
+      ],
+      "ignore": 0,
+      "iscrowd": 0,
+      "area": 1682.2503094212104
+    }
+  ],
+  "info": {
+    "year": 2023,
+    "version": "1.0",
+    "description": "",
+    "contributor": "Label Studio",
+    "url": "",
+    "date_created": "2023-09-01 14:07:22.122672"
+  }
+}

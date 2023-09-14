@@ -1,11 +1,13 @@
 # SyntheticAugmentationGenerator
 **_Библиотека для аугментации изображений путём генерации заданных объектов при помощи диффузионных моделей_**
 
+![](content/result.jpg)
+
 Для установки библиотеки запустите данный код:
 ```console
 git clone https://git.ai-space.tech/t041lk8/syntheticaugmentationgenerator
 cd syntheticaugmentationgenerator
-pip install requirements.txt
+pip install .
 cd ..
 ```
 
@@ -38,7 +40,7 @@ SyntheticAugmentationGenerator позволяет собрать датасет 
 
 Данный генератор можно использовать как из консоли, так и в python коде:
 ```console
-python SyntheticAugmentationGenerator.py [args]
+synt-generator [args]
 ```
 или
 ```python
@@ -66,4 +68,5 @@ guidance_scale=args.guidance_scale, num_inference_steps=args.num_inference_steps
 |num_inference_steps|int|50|Количество шагов по снижению шума. Большее количество шагов по снижению шума обычно приводит к более высокому качеству изображения за счет более медленного инференса|
 |bb_num|int|1|Количество ббоксов для каждого класса на одном изображении|
 |negative_prompt|str|None|Подсказка, указывающая, что не следует включать в генерацию изображений|
-|increase_scale|float|1.2|Этот параметр отвечает за значение, на которое умножается размер bbox для выделения области внимания. Этот параметр должен быть больше 1.|
+|increase_scale|float|1.2|Этот параметр отвечает за значение, на которое умножается размер bbox для выделения области внимания. Этот параметр должен быть больше 1. Данный параметр проигнорируется, если параметр aa_size будет иметь значение отличное от None.|
+|aa_size|int|None|Этот параметр отвечает за размер области внимания.|
