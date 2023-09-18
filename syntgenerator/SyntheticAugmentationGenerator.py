@@ -10,14 +10,271 @@ from PIL import Image, ImageDraw
 from tqdm.autonotebook import tqdm
 from diffusers import StableDiffusionInpaintPipeline, AutoPipelineForInpainting
 
+class InpaintDataset(torch.utils.data.Dataset):
+    def __init__(self, dir_dataset: str or os.PathLike, tokenizer, size=512):
+        self.size = size
+        self.tokenizer = tokenizer
+
+        self.dataset_dir = Path(dataset_dir)
+        if not self.dataset_dir.exists():
+            raise ValueError("Dataset doesn't exists.")
+
+        self.dataset = load_from_disk(dataset_dir)
+        self.images = self.dataset['images']
+        self.prompts = self.dataset['text']
+        self.masks = self.dataset['masks']
+        self.instance_images_path = list(Path(dataset_dir).iterdir())
+        self.num_instance_images = len(self.images)
+        self._length = self.num_instance_images
+        self.image_transforms_resize_and_crop = transforms.Compose(
+            [
+                transforms.Resize(size, interpolation=transforms.InterpolationMode.BILINEAR),
+                # transforms.CenterCrop(size) if center_crop else transforms.RandomCrop(size),
+            ]
+        )
+
+        self.image_transforms = transforms.Compose(
+            [
+                transforms.ToTensor(),
+                transforms.Normalize([0.5], [0.5]),
+            ]
+        )
+
+    def __len__(self):
+        return self._length
+
+    def __getitem__(self, index):
+        example = {}
+        instance_image =self.images[index % self.num_instance_images]
+        if not instance_image.mode == "RGB":
+            instance_image = instance_image.convert("RGB")
+        instance_image = self.image_transforms_resize_and_crop(instance_image)
+
+        example["PIL_images"] = instance_image
+        example["instance_images"] = self.image_transforms(instance_image)
+
+        example["instance_prompt_ids"] = self.tokenizer(
+            self.prompts[index % self.num_instance_images],
+            padding="do_not_pad",
+            truncation=True,
+            max_length=self.tokenizer.model_max_length,
+        ).input_ids
+
+        example['masks'] = self.masks[index % self.num_instance_images]
+        return example
+
+class SDItrainer():
+    def __init__(self, pretrained_model_name_or_path: str or os.PathLike, output_dir: str or os.PathLike):
+        self.pretrained_model_name_or_path = pretrained_model_name_or_path
+        self.output_dir = output_dir
+        os.makedirs(self.output_dir, exist_ok=True)
+
+        self.logging_dir = Path(self.output_dir, 'logs')
+        self.project_config = ProjectConfiguration(
+            project_dir=self.output_dir, logging_dir=self.logging_dir
+        )
+
+        self.tokenizer = CLIPTokenizer.from_pretrained(pretrained_model_name_or_path, subfolder="tokenizer")
+        self.text_encoder = CLIPTextModel.from_pretrained(pretrained_model_name_or_path, subfolder="text_encoder")
+        self.vae = AutoencoderKL.from_pretrained(pretrained_model_name_or_path, subfolder="vae")
+        self.unet = UNet2DConditionModel.from_pretrained(pretrained_model_name_or_path, subfolder="unet")
+        self.noise_scheduler = DDPMScheduler.from_pretrained(pretrained_model_name_or_path, subfolder="scheduler")
+        self.vae.requires_grad_(False)
+        self.text_encoder.requires_grad_(False)
+
+    def __call__(self, 
+                data_dir: str = None, 
+                train_batch_size: int = 1, 
+                max_train_steps: int = 400, 
+                resolution: int = 512, 
+                lr: float = 5e-6, 
+                betas: tuple = (0.9, 0.999), 
+                weight_decay: float = 1e-2, 
+                eps: float = 1e-08, 
+                gradient_accumulation_steps: int = 1,
+                num_warmup_steps: int = 0,
+                checkpoint_save: int = 500):
+        self.optimizer_class = torch.optim.AdamW
+        params_to_optimize = (
+            unet.parameters()
+        )
+        self.optimizer = optimizer_class(
+            params_to_optimize,
+            lr=lr,
+            betas=betas,
+            weight_decay=weight_decay,
+            eps=eps
+        )
+        self.accelerator = Accelerator(
+            gradient_accumulation_steps=gradient_accumulation_steps,
+            mixed_precision="no",
+            log_with="tensorboard",
+            project_config=self.project_config,
+        )
+        self.lr_scheduler = get_scheduler(
+            "constant",
+            optimizer=self.optimizer,
+            num_warmup_steps=num_warmup_steps,
+            num_training_steps=max_train_steps * self.accelerator.num_processes,
+        )
+
+        train_dataset = InpaintDataset(
+            instance_data_root=data_dir,
+            tokenizer=self.tokenizer,
+            size=resolution,
+        )
+        train_dataloader = torch.utils.data.DataLoader(
+            train_dataset, batch_size=train_batch_size, shuffle=True, collate_fn=self.collate_fn
+        )
+
+        self.unet, self.optimizer, train_dataloader, self.lr_scheduler = self.accelerator.prepare(
+            self.unet, self.optimizer, train_dataloader, self.lr_scheduler)
+        self.accelerator.register_for_checkpointing(self.lr_scheduler)
+        weight_dtype = torch.float32
+
+        self.vae.to(self.accelerator.device, dtype=weight_dtype)
+        self.text_encoder.to(self.accelerator.device, dtype=weight_dtype)
+        self.accelerator.init_trackers("dreambooth")
+
+        num_update_steps_per_epoch = math.ceil(len(train_dataloader) / self.accelerator.gradient_accumulation_steps)
+        num_train_epochs = math.ceil(max_train_steps / num_update_steps_per_epoch)
+        total_batch_size = train_batch_size * self.accelerator.num_processes * self.accelerator.gradient_accumulation_steps
+
+        global_step = 0
+        first_epoch = 0
+
+        progress_bar = tqdm(range(global_step, max_train_steps))
+        progress_bar.set_description("Steps")
+
+        for epoch in range(first_epoch, num_train_epochs):
+            self.unet.train()
+            for step, batch in enumerate(train_dataloader):
+                with self.accelerator.accumulate(unet):
+                    latents = self.vae.encode(batch["pixel_values"].to(dtype=weight_dtype)).latent_dist.sample()
+                    latents = latents * self.vae.config.scaling_factor
+
+                    masked_latents = self.vae.encode(
+                        batch["masked_images"].reshape(batch["pixel_values"].shape).to(dtype=weight_dtype)
+                    ).latent_dist.sample()
+                    masked_latents = masked_latents * self.vae.config.scaling_factor
+
+                    masks = batch["masks"]
+                    mask = torch.stack(
+                        [
+                            torch.nn.functional.interpolate(mask, size=(resolution // 8, resolution // 8))
+                            for mask in masks
+                        ]
+                    )
+                    mask = mask.reshape(-1, 1, resolution // 8, resolution // 8)
+
+                    noise = torch.randn_like(latents)
+                    bsz = latents.shape[0]
+                    timesteps = torch.randint(0, self.noise_scheduler.config.num_train_timesteps, (bsz,), device=latents.device)
+                    timesteps = timesteps.long()
+                    
+                    noisy_latents = self.noise_scheduler.add_noise(latents, noise, timesteps)
+                    latent_model_input = torch.cat([noisy_latents, mask, masked_latents], dim=1)
+                    encoder_hidden_states = self.text_encoder(batch["input_ids"])[0]
+                    noise_pred = self.unet(latent_model_input, timesteps, encoder_hidden_states).sample
+
+                    if self.noise_scheduler.config.prediction_type == "epsilon":
+                        target = noise
+                    elif self.noise_scheduler.config.prediction_type == "v_prediction":
+                        target = self.noise_scheduler.get_velocity(latents, noise, timesteps)
+                    else:
+                        raise ValueError(f"Unknown prediction type {self.noise_scheduler.config.prediction_type}")
+
+                    loss = F.mse_loss(noise_pred.float(), target.float(), reduction="mean")
+                    self.accelerator.backward(loss)
+                    if self.accelerator.sync_gradients:
+                        params_to_clip = (
+                            self.unet.parameters()
+                        )
+                        self.accelerator.clip_grad_norm_(params_to_clip, 1.0)
+                    self.optimizer.step()
+                    self.lr_scheduler.step()
+                    self.optimizer.zero_grad()
+
+                if self.accelerator.sync_gradients:
+                    progress_bar.update(1)
+                    global_step += 1
+
+                    if global_step % checkpoint_save == 0:
+                        if self.accelerator.is_main_process:
+                            save_path = os.path.join(self.output_dir, f"checkpoint-{global_step}")
+                            self.accelerator.save_state(save_path)
+
+                logs = {"loss": loss.detach().item(), "lr": self.lr_scheduler.get_last_lr()[0]}
+                progress_bar.set_postfix(**logs)
+                self.accelerator.log(logs, step=global_step)
+
+                if global_step >= max_train_steps:
+                    break
+
+            self.accelerator.wait_for_everyone()
+
+        if self.accelerator.is_main_process:
+            pipeline = StableDiffusionPipeline.from_pretrained(
+                self.pretrained_model_name_or_path,
+                unet=self.accelerator.unwrap_model(self.unet),
+                text_encoder=self.accelerator.unwrap_model(self.text_encoder),
+            )
+            pipeline.save_pretrained(self.output_dir)
+
+        self.accelerator.end_training()
+    
+    def prepare_mask_and_masked_image(self, image, mask):
+        image = np.array(image.convert("RGB"))
+        image = image[None].transpose(0, 3, 1, 2)
+        image = torch.from_numpy(image).to(dtype=torch.float32) / 127.5 - 1.0
+
+        mask = np.array(mask.convert("L"))
+        mask = mask.astype(np.float32) / 255.0
+        mask = mask[None, None]
+        mask[mask < 0.5] = 0
+        mask[mask >= 0.5] = 1
+        mask = torch.from_numpy(mask)
+        masked_image = image * (mask < 0.5)
+
+        return mask, masked_image
+
+    def collate_fn(self, examples):
+        input_ids = [example["instance_prompt_ids"] for example in examples]
+        pixel_values = [example["instance_images"] for example in examples]
+
+        masks = []
+        masked_images = []
+        for example in examples:
+            pil_image = example["PIL_images"]
+            mask = example["masks"]
+            mask, masked_image = prepare_mask_and_masked_image(pil_image, mask)
+            masks.append(mask)
+            masked_images.append(masked_image)
+
+        pixel_values = torch.stack(pixel_values)
+        pixel_values = pixel_values.to(memory_format=torch.contiguous_format).float()
+
+        input_ids = tokenizer.pad({"input_ids": input_ids}, padding=True, return_tensors="pt").input_ids
+        masks = torch.stack(masks)
+        masked_images = torch.stack(masked_images)
+        batch = {"input_ids": input_ids, "pixel_values": pixel_values, "masks": masks, "masked_images": masked_images}
+        return batch
+
+    
+
 class AugmentationGenerator():
-    def __init__(self, source_json: str or os.PathLike, final_json: str or os.PathLike, dir_images: str or os.PathLike, dir_dataset: str or os.PathLike, weights: str = "stabilityai/stable-diffusion-2-inpainting"):
+    def __init__(self, source_json: str or os.PathLike, 
+                final_json: str or os.PathLike, 
+                dir_images: str or os.PathLike, 
+                dir_dataset: str or os.PathLike, 
+                pipeline = "stabilityai/stable-diffusion-2-inpainting"):
         self.dir_images = dir_images
         self.img_files = sorted(os.listdir(dir_images))
         with open(source_json) as f:
             annotations = json.load(f)
             self.bboxs = annotations['bboxs']
             self.classes = annotations['classes']
+        self.pipe = pipeline
 
         self.coco = {
             "info":{},
@@ -33,26 +290,6 @@ class AugmentationGenerator():
         self.final_json = final_json
         self.dir_dataset = dir_dataset
         os.makedirs(self.dir_dataset, exist_ok=True)
-        
-        self.weights = weights
-        try:
-            self.pipe = StableDiffusionInpaintPipeline.from_pretrained(
-                self.weights,
-                torch_dtype=torch.float16,
-                force_download=True, 
-                resume_download=False,
-                safety_checker = None
-            ).to("cuda")
-        except ValueError:
-            print('The weights of your model are not suitable for the StableDiffusionInpaintPipeline')
-            print('The AutoPipelineForInpainting will be used')
-            self.pipe = AutoPipelineForInpainting.from_pretrained(
-                self.weights,
-                torch_dtype=torch.float16,
-                force_download=True, 
-                resume_download=False,
-                safety_checker = None
-            ).to("cuda")
             
     @staticmethod        
     def generate_mask(aa_size, bbox, x_bias, y_bias):
@@ -149,25 +386,3 @@ class AugmentationGenerator():
         
         with open(self.final_json, 'w') as fp: # Final JSON file with COCO annotations
             json.dump(self.coco, fp)
-
-def main():
-    parser = argparse.ArgumentParser(description='Synthetic augmentation generator based on diffusion models.')
-    parser.add_argument('--source_json', type=str, default=None, required=True, help="Path to JSON file with prompts and bboxes.")
-    parser.add_argument('--final_json', type=str, default=None, required=True, help='Path to generated JSON file in COCO format.')
-    parser.add_argument('--dir_images', type=str, default=None, required=True, help='Path to directory with original images.')
-    parser.add_argument('--dir_dataset', type=str, default=None, required=True, help='Path to directory for augmented images.')
-    parser.add_argument('--weights', type=str, required=False, default="stabilityai/stable-diffusion-2-inpainting", help='Path to directory with model. HuggingFace hub is supported.')
-    
-    parser.add_argument('--guidance_scale', type=float, required=False, default=10, help='A higher guidance scale value encourages the model to generate images closely linked to the text prompt at the expense of lower image quality. Guidance scale is enabled when guidance_scale > 1.')
-    parser.add_argument('--num_inference_steps', type=int, required=False, default=50, help='The number of denoising steps. More denoising steps usually lead to a higher quality image at the expense of slower inference.')
-    parser.add_argument('--negative_prompt', type=str, required=False, default=None, help='The prompt to guide what to not include in image generation.')
-    parser.add_argument('--bbox_number', type=int, required=False, default=1, help='The number of bboxes generated for each class in one image.')
-    parser.add_argument('--increase_scale', type=float, required=False, default=1.2, help='This parameter is responsible for the value by which the size of the bbox is multiplied to allocate the attention area. This parameter must be greater than 1. This parameter will be ignored if parameter --aa_size has a value other than None')
-    parser.add_argument('--aa_size', type=int, required=False, default=None, help='This parameter is responsible for the attention area size.')
-    args = parser.parse_args()
-
-    Generator = AugmentationGenerator(source_json=args.source_json, final_json=args.final_json, dir_images=args.dir_images, dir_dataset=args.dir_dataset, weights=args.weights)
-    Generator(guidance_scale=args.guidance_scale, num_inference_steps=args.num_inference_steps, bb_num=args.bbox_number, negative_prompt=args.negative_prompt, increase_scale=args.increase_scale, aa_size=args.aa_size)
-    
-if __name__ == "__main__":
-    main()

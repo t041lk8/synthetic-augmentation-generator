@@ -9,8 +9,5 @@ setup(
     packages=setuptools.find_packages(),
     install_requires=reqs,
     author="",
-    version='0.0.1',
-    entry_points={
-        'console_scripts': ['synt-generator=syntgenerator.SyntheticAugmentationGenerator:main'],
-    }
+    version='0.0.2'
 )
