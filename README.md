@@ -6,7 +6,7 @@
 Для установки библиотеки запустите данный код:
 ```console
 git clone https://git.ai-space.tech/t041lk8/synthetic-augmentation-generator
-cd syntheticaugmentationgenerator
+cd synthetic-augmentation-generator
 pip install .
 cd ..
 ```
@@ -38,17 +38,15 @@ SyntheticAugmentationGenerator позволяет собрать датасет 
 ```
 На выходе пользователь получит аугментированные изображения и разметку в формате COCO.
 
-Данный генератор можно использовать как из консоли, так и в python коде:
-```console
-synt-generator [args]
-```
-или
+Данный генератор можно использовать, импортировав его из библиотеки syntgenerator:
 ```python
-from SyntheticAugmentationGenerator import AugmentationGenerator
+from syntgenerator import AugmentationGenerator
 
 generator = AugmentationGenerator({initial_args})
 generator({call_args})
 ```
+
+Примеры использования генератора и дообучения Stable Diffusion Inpaint можно посмотреть в ноутбуках [GeneratorUsageExample](notebooks/GeneratorUsageExample.ipynb) и [StableDiffusionFinetuning](notebooks/StableDiffusionFinetuning.ipynb).
 
 ## Аргументы
 ### Инициализация
@@ -58,7 +56,7 @@ generator({call_args})
 |final_json|str, os.PathLike|None|Путь к JSON файлу в формате COCO|
 |dir_images|str, os.PathLike|None|Путь к оригинальным изображениям|
 |dir_dataset|str, os.PathLike|None|Путь к аугментированным изображениям|
-|weights|str, os.PathLike|stabilityai/stable-diffusion-2-inpainting|Путь к предобученной модели|
+|pipeline|StableDiffusionInpaintPipeline, AutoPipelineForInpainting|None|Inpaint пайплайн модели из библиотеки *diffusers* |
 
 ### Вызов
 |Аргумент|Тип|Значение по умолчанию|Описание|

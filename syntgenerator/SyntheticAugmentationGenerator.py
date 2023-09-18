@@ -1,14 +1,28 @@
 import os
 import sys
 import json
+import math
 import random
 
 import torch
-import argparse
 import numpy as np
+import torch.nn.functional as F
 from PIL import Image, ImageDraw
 from tqdm.autonotebook import tqdm
-from diffusers import StableDiffusionInpaintPipeline, AutoPipelineForInpainting
+from pathlib import Path
+from accelerate import Accelerator
+from accelerate.utils import ProjectConfiguration
+from torchvision import transforms
+from transformers import CLIPTextModel, CLIPTokenizer
+from diffusers import (
+    AutoencoderKL,
+    DDPMScheduler,
+    StableDiffusionInpaintPipeline,
+    StableDiffusionPipeline,
+    UNet2DConditionModel,
+)
+from diffusers.optimization import get_scheduler
+from datasets import load_from_disk
 
 class InpaintDataset(torch.utils.data.Dataset):
     def __init__(self, dir_dataset: str or os.PathLike, tokenizer, size=512):
@@ -263,11 +277,11 @@ class SDItrainer():
     
 
 class AugmentationGenerator():
-    def __init__(self, source_json: str or os.PathLike, 
-                final_json: str or os.PathLike, 
-                dir_images: str or os.PathLike, 
-                dir_dataset: str or os.PathLike, 
-                pipeline = "stabilityai/stable-diffusion-2-inpainting"):
+    def __init__(self, source_json: str or os.PathLike = None, 
+                final_json: str or os.PathLike = None, 
+                dir_images: str or os.PathLike = None, 
+                dir_dataset: str or os.PathLike = None, 
+                pipeline = None):
         self.dir_images = dir_images
         self.img_files = sorted(os.listdir(dir_images))
         with open(source_json) as f:
