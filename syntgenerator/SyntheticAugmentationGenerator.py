@@ -168,7 +168,7 @@ class SDItrainer():
         for epoch in range(first_epoch, num_train_epochs):
             self.unet.train()
             for step, batch in enumerate(train_dataloader):
-                with self.accelerator.accumulate(unet):
+                with self.accelerator.accumulate(self.unet):
                     latents = self.vae.encode(batch["pixel_values"].to(dtype=weight_dtype)).latent_dist.sample()
                     latents = latents * self.vae.config.scaling_factor
 
@@ -266,14 +266,14 @@ class SDItrainer():
         for example in examples:
             pil_image = example["PIL_images"]
             mask = example["masks"]
-            mask, masked_image = prepare_mask_and_masked_image(pil_image, mask)
+            mask, masked_image = self.prepare_mask_and_masked_image(pil_image, mask)
             masks.append(mask)
             masked_images.append(masked_image)
 
         pixel_values = torch.stack(pixel_values)
         pixel_values = pixel_values.to(memory_format=torch.contiguous_format).float()
 
-        input_ids = tokenizer.pad({"input_ids": input_ids}, padding=True, return_tensors="pt").input_ids
+        input_ids = self.tokenizer.pad({"input_ids": input_ids}, padding=True, return_tensors="pt").input_ids
         masks = torch.stack(masks)
         masked_images = torch.stack(masked_images)
         batch = {"input_ids": input_ids, "pixel_values": pixel_values, "masks": masks, "masked_images": masked_images}
@@ -282,11 +282,11 @@ class SDItrainer():
     
 
 class AugmentationGenerator():
-    def __init__(self, source_json: str or os.PathLike = None, 
-                final_json: str or os.PathLike = None, 
-                dir_images: str or os.PathLike = None, 
-                dir_dataset: str or os.PathLike = None, 
-                pipeline = None):
+    def __init__(self, source_json: str or os.PathLike, 
+                final_json: str or os.PathLike, 
+                dir_images: str or os.PathLike, 
+                dir_dataset: str or os.PathLike, 
+                pipeline):
         self.dir_images = dir_images
         self.img_files = sorted(os.listdir(dir_images))
         with open(source_json) as f:
