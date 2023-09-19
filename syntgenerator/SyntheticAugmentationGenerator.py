@@ -81,7 +81,9 @@ class InpaintDataset(torch.utils.data.Dataset):
         return example
 
 class SDItrainer():
-    def __init__(self, pretrained_model_name_or_path: str or os.PathLike, output_dir: str or os.PathLike):
+    def __init__(self, 
+                pretrained_model_name_or_path: str or os.PathLike, 
+                output_dir: str or os.PathLike):
         self.pretrained_model_name_or_path = pretrained_model_name_or_path
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)
@@ -351,7 +353,13 @@ class AugmentationGenerator():
         attention_area = img.crop([x_top, y_top, x_bottom, y_bottom]).resize((512,512), resample=Image.Resampling.BILINEAR)
         return attention_area, mask, segment_area, aa_size
 
-    def __call__(self, guidance_scale: float = 10, num_inference_steps: int = 50, negative_prompt: str = None, bb_num: int = 1, increase_scale: float = 1.2, aa_size: int = None):
+    def __call__(self, 
+                guidance_scale: float = 10, 
+                num_inference_steps: int = 50, 
+                negative_prompt: str = None, 
+                bb_num: int = 1, 
+                increase_scale: float = 1.2, 
+                aa_size: int = None):
         ann_id = 0
         img_id = 0
         for img_file in self.img_files:
