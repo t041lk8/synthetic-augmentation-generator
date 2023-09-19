@@ -25,7 +25,10 @@ from diffusers.optimization import get_scheduler
 from datasets import load_from_disk
 
 class InpaintDataset(torch.utils.data.Dataset):
-    def __init__(self, dir_dataset: str or os.PathLike, tokenizer, size=512):
+    def __init__(self, 
+                dataset_dir: str or os.PathLike, 
+                tokenizer, 
+                size: int=512):
         self.size = size
         self.tokenizer = tokenizer
 
@@ -33,7 +36,7 @@ class InpaintDataset(torch.utils.data.Dataset):
         if not self.dataset_dir.exists():
             raise ValueError("Dataset doesn't exists.")
 
-        self.dataset = load_from_disk(dataset_dir)
+        self.dataset = load_from_disk(self.dataset_dir)
         self.images = self.dataset['images']
         self.prompts = self.dataset['text']
         self.masks = self.dataset['masks']
@@ -108,9 +111,9 @@ class SDItrainer():
                 gradient_accumulation_steps: int = 1,
                 num_warmup_steps: int = 0,
                 checkpoint_save: int = 500):
-        self.optimizer_class = torch.optim.AdamW
+        optimizer_class = torch.optim.AdamW
         params_to_optimize = (
-            unet.parameters()
+            self.unet.parameters()
         )
         self.optimizer = optimizer_class(
             params_to_optimize,
@@ -133,7 +136,7 @@ class SDItrainer():
         )
 
         train_dataset = InpaintDataset(
-            instance_data_root=data_dir,
+            dataset_dir=data_dir,
             tokenizer=self.tokenizer,
             size=resolution,
         )
